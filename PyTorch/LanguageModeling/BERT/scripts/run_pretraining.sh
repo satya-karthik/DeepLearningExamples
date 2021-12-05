@@ -14,34 +14,35 @@
 # limitations under the License.
 
 echo "Container nvidia build = " $NVIDIA_BUILD_ID
-train_batch_size=${1:-8192}
-learning_rate=${2:-"6e-3"}
+train_batch_size=${1:-1024}
+learning_rate=${2:-"7.5e-4"}
 precision=${3:-"fp16"}
-num_gpus=${4:-8}
+num_gpus=${4:-4}
 warmup_proportion=${5:-"0.2843"}
-train_steps=${6:-7038}
-save_checkpoint_steps=${7:-200}
+train_steps=${6:-813802}
+save_checkpoint_steps=${7:-1600}
 resume_training=${8:-"false"}
 create_logfile=${9:-"true"}
 accumulate_gradients=${10:-"true"}
-gradient_accumulation_steps=${11:-128}
+gradient_accumulation_steps=${11:-4}
 seed=${12:-12439}
 job_name=${13:-"bert_lamb_pretraining"}
 allreduce_post_accumulation=${14:-"true"}
 allreduce_post_accumulation_fp16=${15:-"true"}
-train_batch_size_phase2=${16:-4096}
+train_batch_size_phase2=${16:-1024}
 learning_rate_phase2=${17:-"4e-3"}
 warmup_proportion_phase2=${18:-"0.128"}
-train_steps_phase2=${19:-1563}
-gradient_accumulation_steps_phase2=${20:-512}
-DATASET=hdf5_lower_case_1_seq_len_128_max_pred_20_masked_lm_prob_0.15_random_seed_12345_dupe_factor_5/wikicorpus_en # change this for other datasets
+train_steps_phase2=${19:-90422}
+gradient_accumulation_steps_phase2=${20:-8}
+DATASET=hdf5_lower_case_1_seq_len_128_max_pred_20_masked_lm_prob_0.15_random_seed_12345_dupe_factor_5/books_wiki_en_corpus # change this for other datasets
 DATA_DIR_PHASE1=${21:-$BERT_PREP_WORKING_DIR/${DATASET}/}
-BERT_CONFIG=bert_config.json
-DATASET2=hdf5_lower_case_1_seq_len_512_max_pred_80_masked_lm_prob_0.15_random_seed_12345_dupe_factor_5/wikicorpus_en # change this for other datasets
+BERT_CONFIG=bert_config_base.json
+DATASET2=hdf5_lower_case_1_seq_len_512_max_pred_80_masked_lm_prob_0.15_random_seed_12345_dupe_factor_5/books_wiki_en_corpus # change this for other datasets
 DATA_DIR_PHASE2=${22:-$BERT_PREP_WORKING_DIR/${DATASET2}/}
 CODEDIR=${23:-"/workspace/bert"}
 init_checkpoint=${24:-"None"}
-RESULTS_DIR=$CODEDIR/results
+RUN_NAME=$(date +"%Y_%m_%d_%H_%M_%S")
+RESULTS_DIR=$CODEDIR/results/$RUN_NAME
 CHECKPOINTS_DIR=$RESULTS_DIR/checkpoints
 
 mkdir -p $CHECKPOINTS_DIR
@@ -52,7 +53,8 @@ if [ ! -d "$DATA_DIR_PHASE1" ] ; then
 fi
 if [ ! -d "$RESULTS_DIR" ] ; then
    echo "Error! $RESULTS_DIR directory missing."
-   exit -1
+   mkdir $RESULTS_DIR
+#    exit -1
 fi
 if [ ! -d "$CHECKPOINTS_DIR" ] ; then
    echo "Warning! $CHECKPOINTS_DIR directory missing."
@@ -107,7 +109,7 @@ CMD=" $CODEDIR/run_pretraining.py"
 CMD+=" --input_dir=$DATA_DIR_PHASE1"
 CMD+=" --output_dir=$CHECKPOINTS_DIR"
 CMD+=" --config_file=$BERT_CONFIG"
-CMD+=" --bert_model=bert-large-uncased"
+CMD+=" --bert_model=bert-base-uncased"
 CMD+=" --train_batch_size=$train_batch_size"
 CMD+=" --max_seq_length=128"
 CMD+=" --max_predictions_per_seq=20"
@@ -184,7 +186,7 @@ CMD=" $CODEDIR/run_pretraining.py"
 CMD+=" --input_dir=$DATA_DIR_PHASE2"
 CMD+=" --output_dir=$CHECKPOINTS_DIR"
 CMD+=" --config_file=$BERT_CONFIG"
-CMD+=" --bert_model=bert-large-uncased"
+CMD+=" --bert_model=bert-base-uncased"
 CMD+=" --train_batch_size=$train_batch_size_phase2"
 CMD+=" --max_seq_length=512"
 CMD+=" --max_predictions_per_seq=80"
