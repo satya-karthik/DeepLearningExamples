@@ -42,7 +42,8 @@ def main(args):
         'download' : working_dir + '/download',    # Downloaded and decompressed
         'extracted' : working_dir +'/extracted',    # Extracted from whatever the initial format is (e.g., wikiextractor)
         'formatted' : working_dir + '/formatted_one_article_per_line',    # This is the level where all sources should look the same
-        'sharded' : working_dir + '/sharded_' + "training_shards_" + str(args.n_training_shards) + "_test_shards_" + str(args.n_test_shards) + "_fraction_" + str(args.fraction_test_set),
+#         'sharded' : working_dir + '/sharded_' + "training_shards_" + str(args.n_training_shards) + "_test_shards_" + str(args.n_test_shards) + "_fraction_" + str(args.fraction_test_set),
+        'sharded' : working_dir + '/sharded',
         'tfrecord' : working_dir + '/tfrecord'+ hdf5_tfrecord_folder_prefix,
         'hdf5': working_dir + '/hdf5' + hdf5_tfrecord_folder_prefix
     }
