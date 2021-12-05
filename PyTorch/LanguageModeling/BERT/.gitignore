@@ -9,6 +9,7 @@ __pycache__/
 *.so
 
 #Data checkpoints and results       
+data/*
 data/*/*/   
 data/*/*.zip
 checkpoints/
