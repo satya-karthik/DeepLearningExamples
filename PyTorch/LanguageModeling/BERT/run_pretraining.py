@@ -32,6 +32,7 @@ import h5py
 from tqdm import tqdm, trange
 import os
 from pathlib import Path
+import json
 import numpy as np
 import torch
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, Dataset
@@ -526,6 +527,12 @@ def main():
     global timeout_sent
 
     args = parse_arguments()
+
+    # saving the hyper-parameters to json dump
+    json_save_path = str(
+        Path(args.output_dir).resolve().parent / 'hyper_parameters.json')
+    with open(json_save_path, 'wt') as f:
+        json.dump(vars(args), f, indent=4)
 
     random.seed(args.seed + args.local_rank)
     np.random.seed(args.seed + args.local_rank)
