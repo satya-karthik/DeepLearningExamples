@@ -40,7 +40,7 @@ from torch.utils.data.distributed import DistributedSampler
 import math
 from apex import amp
 import multiprocessing
-from torch.utils.tensorboard import SummaryWriter
+
 
 from tokenization import BertTokenizer
 import modeling
@@ -680,8 +680,7 @@ def main():
                         if is_main_process():
                             dllogger.log(step=(epoch, global_step, ), data={
                                          "final_loss": final_loss})
-                            summary.add_scalar(
-                                'loss/final loss', final_loss, training_steps)
+
                     elif training_steps % (args.log_freq * args.gradient_accumulation_steps) == 0:
                         if is_main_process():
                             dllogger.log(step=(epoch, global_step, ),
