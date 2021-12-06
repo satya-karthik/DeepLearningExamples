@@ -535,13 +535,6 @@ def main():
 
     device, args = setup_training(args)
     dllogger.log(step="PARAMETER", data={"Config": [str(args)]})
-
-    # tensorboard support
-    exp_name = (f"{datetime.now().strftime('%Y_%m_%d_%H_%M_%S')}_"
-                + f"bs_{args.train_batch_size}_lr_{args.learning_rate}_p1_steps_{args.phase1_end_step}")
-    log_dir = str(Path(args.output_dir).resolve().parent / "logs"/exp_name)
-    summary = SummaryWriter(log_dir=log_dir)
-
     # Prepare optimizer
     model, optimizer, lr_scheduler, checkpoint, global_step, criterion = prepare_model_and_optimizer(
         args, device)
@@ -688,17 +681,6 @@ def main():
                                          data={"average_loss": average_loss / (args.log_freq * divisor),
                                                "step_loss": loss.item() * args.gradient_accumulation_steps / divisor,
                                                "learning_rate": optimizer.param_groups[0]['lr']})
-
-                            summary.add_scalar('loss/average loss', average_loss / (args.log_freq * divisor),
-                                               training_steps)
-
-                            summary.add_scalar("loss/step loss",
-                                               (loss.item() *
-                                                args.gradient_accumulation_steps / divisor),
-                                               training_steps)
-
-                            summary.add_scalar(
-                                'learning rate/lr', optimizer.param_groups[0]['lr'], training_steps)
                         average_loss = 0
 
                     if global_step >= args.steps_this_run or training_steps % (
