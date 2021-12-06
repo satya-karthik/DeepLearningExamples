@@ -17,11 +17,12 @@
 """BERT finetuning runner."""
 
 from __future__ import absolute_import
-import signal
 from __future__ import division
 from __future__ import print_function
 
 # ==================
+import signal
+from datetime import datetime
 import csv
 import os
 import time
@@ -533,8 +534,13 @@ def main():
 
     device, args = setup_training(args)
     dllogger.log(step="PARAMETER", data={"Config": [str(args)]})
-    summary = SummaryWriter(os.path.join(
-        args.output_dir, "logs"))
+
+    # tensorboard support
+    log_dir = os.path.join(os.path.pardir(args.output_dir), "logs")
+    exp_name = (f"{datetime.now().strftime(" % Y_ % m_ % d_ % H_ % M_ % S")}_"
+                + f"bs_{args.batch_size}_lr_{args.learning_rate}_p1_steps{args.phase1_end_step}")
+    summary = SummaryWriter(log_dir=log_dir, comment=exp_name)
+
     # Prepare optimizer
     model, optimizer, lr_scheduler, checkpoint, global_step, criterion = prepare_model_and_optimizer(
         args, device)
@@ -673,32 +679,35 @@ def main():
                         if is_main_process():
                             dllogger.log(step=(epoch, global_step, ), data={
                                          "final_loss": final_loss})
-                            summary.add_scalars(
-                                'loss', {'final loss': final_loss}, global_step)
+                            summary.add_scalar(
+                                'loss/final loss', final_loss, global_step)
                     elif training_steps % (args.log_freq * args.gradient_accumulation_steps) == 0:
                         if is_main_process():
-                            dllogger.log(step=(epoch, global_step, ), data={"average_loss": average_loss / (args.log_freq * divisor),
-                                                                            "step_loss": loss.item() * args.gradient_accumulation_steps / divisor,
-                                                                            "learning_rate": optimizer.param_groups[0]['lr']})
+                            dllogger.log(step=(epoch, global_step, ),
+                                         data={"average_loss": average_loss / (args.log_freq * divisor),
+                                               "step_loss": loss.item() * args.gradient_accumulation_steps / divisor,
+                                               "learning_rate": optimizer.param_groups[0]['lr']})
 
-                            summary.add_scalars(
-                                'loss', {'average loss': average_loss / (args.log_freq * divisor),
-                                         "step loss": loss.item() * args.gradient_accumulation_steps / divisor},
+                            summary.add_scalar('loss/average loss', average_loss / (args.log_freq * divisor),
+                            global_step)
+
+                            summary.add_scalar("loss/step loss", loss.item() * args.gradient_accumulation_steps / divisor},
                                 global_step)
-                            summary.add_scalars(
-                                'learning rate', {'lr': optimizer.param_groups[0]['lr']}, global_step)
-                        average_loss = 0
+
+                            summary.add_scalar(
+                                'learning rate/lr', optimizer.param_groups[0]['lr'], global_step)
+                        average_loss=0
 
                     if global_step >= args.steps_this_run or training_steps % (
                             args.num_steps_per_checkpoint * args.gradient_accumulation_steps) == 0 or timeout_sent:
                         if is_main_process() and not args.skip_checkpoint:
                             # Save a trained model
-                            dllogger.log(step="PARAMETER", data={
+                            dllogger.log(step = "PARAMETER", data = {
                                          "checkpoint_step": global_step})
-                            model_to_save = model.module if hasattr(model,
+                            model_to_save=model.module if hasattr(model,
                                                                     'module') else model  # Only save the model it-self
                             if args.resume_step < 0 or not args.phase2:
-                                output_save_file = os.path.join(
+                                output_save_file=os.path.join(
                                     args.output_dir, "ckpt_{}.pt".format(global_step))
                             else:
                                 output_save_file = os.path.join(
