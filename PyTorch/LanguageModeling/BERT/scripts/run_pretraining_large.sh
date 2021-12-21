@@ -127,7 +127,7 @@ CMD+=" $ALL_REDUCE_POST_ACCUMULATION"
 CMD+=" $ALL_REDUCE_POST_ACCUMULATION_FP16"
 CMD+=" $INIT_CHECKPOINT"
 CMD+=" --do_train"
-CMD+=" --json-summary ${RESULTS_DIR}/dllogger.json "
+CMD+=" --json-summary ${RESULTS_DIR}/dllogger_phase1.json "
 
 CMD="python3 -m torch.distributed.launch --nproc_per_node=$num_gpus $CMD"
 
@@ -203,7 +203,7 @@ CMD+=" $CHECKPOINT"
 CMD+=" $ALL_REDUCE_POST_ACCUMULATION"
 CMD+=" $ALL_REDUCE_POST_ACCUMULATION_FP16"
 CMD+=" --do_train --phase2 --resume_from_checkpoint --phase1_end_step=$train_steps"
-CMD+=" --json-summary ${RESULTS_DIR}/dllogger.json "
+CMD+=" --json-summary ${RESULTS_DIR}/dllogger_phase2.json "
 
 CMD="python3 -m torch.distributed.launch --nproc_per_node=$num_gpus $CMD"
 

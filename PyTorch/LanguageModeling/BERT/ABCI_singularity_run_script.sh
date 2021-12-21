@@ -8,8 +8,7 @@
 
 # source and load the modules
 source /etc/profile.d/modules.sh
-module load cuda/11.0/11.0.3 singularitypro/3.7 \
-    cudnn/8.0/8.0.5 python/3.6/3.6.12
+module singularitypro/3.7
 
 # run the job
 singularity exec --nv --bind $PWD:/workspace/bert \
