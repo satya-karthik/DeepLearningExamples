@@ -19,12 +19,12 @@ learning_rate=${2:-"6e-3"}
 precision=${3:-"fp16"}
 num_gpus=${4:-8}
 warmup_proportion=${5:-"0.2843"}
-train_steps=${6:-3519} # 215612
-save_checkpoint_steps=${7:-500}
+train_steps=${6:-7038}
+save_checkpoint_steps=${7:-700}
 resume_training=${8:-"false"}
 create_logfile=${9:-"true"}
 accumulate_gradients=${10:-"true"}
-gradient_accumulation_steps=${11:-64}
+gradient_accumulation_steps=${11:-128}
 seed=${12:-12439}
 job_name=${13:-"bert_large_lamb_pretraining"}
 allreduce_post_accumulation=${14:-"true"}
@@ -32,8 +32,8 @@ allreduce_post_accumulation_fp16=${15:-"true"}
 train_batch_size_phase2=${16:-4096}
 learning_rate_phase2=${17:-"4e-3"}
 warmup_proportion_phase2=${18:-"0.128"}
-train_steps_phase2=${19:-782} # 9042
-gradient_accumulation_steps_phase2=${20:-256}
+train_steps_phase2=${19:-1563}
+gradient_accumulation_steps_phase2=${20:-512}
 DATASET=hdf5_lower_case_1_seq_len_128_max_pred_20_masked_lm_prob_0.15_random_seed_12345_dupe_factor_5/books_wiki_en_corpus # change this for other datasets
 DATA_DIR_PHASE1=${21:-$BERT_PREP_WORKING_DIR/${DATASET}/}
 DATASET2=hdf5_lower_case_1_seq_len_512_max_pred_80_masked_lm_prob_0.15_random_seed_12345_dupe_factor_5/books_wiki_en_corpus # change this for other datasets
@@ -111,7 +111,7 @@ CMD=" $CODEDIR/run_pretraining.py"
 CMD+=" --input_dir=$DATA_DIR_PHASE1"
 CMD+=" --output_dir=$CHECKPOINTS_DIR"
 CMD+=" --config_file=$BERT_CONFIG"
-CMD+=" --bert_model=bert-base-uncased"
+CMD+=" --bert_model=bert-large-uncased"
 CMD+=" --train_batch_size=$train_batch_size"
 CMD+=" --max_seq_length=128"
 CMD+=" --max_predictions_per_seq=20"
@@ -188,7 +188,7 @@ CMD=" $CODEDIR/run_pretraining.py"
 CMD+=" --input_dir=$DATA_DIR_PHASE2"
 CMD+=" --output_dir=$CHECKPOINTS_DIR"
 CMD+=" --config_file=$BERT_CONFIG"
-CMD+=" --bert_model=bert-base-uncased"
+CMD+=" --bert_model=bert-large-uncased"
 CMD+=" --train_batch_size=$train_batch_size_phase2"
 CMD+=" --max_seq_length=512"
 CMD+=" --max_predictions_per_seq=80"

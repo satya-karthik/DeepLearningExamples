@@ -529,8 +529,12 @@ def main():
     args = parse_arguments()
 
     # saving the hyper-parameters to json dump
-    json_save_path = str(
-        Path(args.output_dir).resolve().parent / 'hyper_parameters.json')
+    if args.phase2:
+        json_save_path = str(
+            Path(args.output_dir).resolve().parent / 'hyper_parameters_phase2.json')
+    else:
+        json_save_path = str(
+            Path(args.output_dir).resolve().parent / 'hyper_parameters_phase1.json')
     with open(json_save_path, 'wt') as f:
         json.dump(vars(args), f, indent=4)
 
