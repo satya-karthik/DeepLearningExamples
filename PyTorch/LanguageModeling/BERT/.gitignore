@@ -135,3 +135,7 @@ tensorflow_code
 
 # Models
 models
+
+# singularity images
+*.simg
+*.sif

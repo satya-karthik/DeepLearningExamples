@@ -16,4 +16,4 @@ module load singularitypro/3.7
 singularity exec --nv --env OMP_NUM_THREADS=16 --bind $PWD:/workspace/bert \
     --bind $PWD/results:/results \
     ./karthik_bert_pytorch.sif \
-    bash scripts/run_pretraining.sh
+    bash scripts/run_pretraining_base.sh
