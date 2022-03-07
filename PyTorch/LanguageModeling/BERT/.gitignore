@@ -139,3 +139,6 @@ models
 # singularity images
 *.simg
 *.sif
+
+# logs
+**/logs
