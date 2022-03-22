@@ -149,3 +149,4 @@ models
 
 #data
 *.npz
+*.jpg
