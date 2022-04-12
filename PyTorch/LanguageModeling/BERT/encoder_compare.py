@@ -13,11 +13,16 @@ from weight_comparison import print_and_plot_difference, setup_context
 from nnabla.logger import logger
 
 
-def hook(f):
-    # print(f'{f.name} {f.outputs[0].g.mean()} {f.outputs[0].g.std()}')
-    print(f'{f.name} {f.outputs[0].d.mean()} {f.outputs[0].d.std()}')
+def nnabla_hook(f):
+    print(f"{f.name} | mean:{f.outputs[0].d.mean():>.6f} |" +
+          f" max:{f.outputs[0].d.max():>.6f} | min:{f.outputs[0].d.min():>.6f} " +
+          f"| std:{f.outputs[0].d.std():>.6f}")
 
-# nloss.backward(clear_buffer=True, function_pre_hook=hook)
+
+def pytorch_hook(self, input_d, output_d):
+    print(f"{self.__class__.__name__} | mean:{output_d.mean():>.6f}" +
+          f"| max:{output_d.max():>.6f} | min:{output_d.min():>.6f} " +
+          f"| std:{output_d.std():>.6f})")
 
 
 def get_args():
@@ -43,9 +48,6 @@ def create_sample_data(args):
         hs = np.random.rand(args.batch_size, args.seq_len, args.embed_dim)
         # [32, 128]
         attention_mask = np.ones((args.batch_size, args.seq_len))
-        # attention_mask = np.zeros((args.batch_size,args.seq_len))
-        # attention_mask = np.random.randint(
-        #     0, 2, size=(args.batch_size, args.seq_len))
         np.savez('encoder_test_data', hs=hs, attention_mask=attention_mask)
 
 
@@ -64,12 +66,14 @@ def create_nnabla_model(args):
     # we are creating a transposed hs
     hs = nn.Variable([args.seq_len, args.batch_size, args.embed_dim])
     attention_mask = nn.Variable([args.batch_size, args.seq_len])
-
+    extended_attention_mask = (1.0 - attention_mask) * -10000.0
+    print(f"extended mask {extended_attention_mask.shape} ")
     encoder = PF.transformer_encode(hs, args.embed_dim, args.num_heads,
                                     dim_feedforward=args.dim_feedforward,
                                     dropout=0.0, activation=F.gelu,
                                     name='encoder01',
-                                    src_key_padding_mask=attention_mask)
+                                    src_additive_mask=extended_attention_mask,
+                                    src_key_padding_mask=None)
 
     model = {}
     model["model"] = encoder
@@ -109,8 +113,8 @@ def nnabla_assign_data(var_dict, data_dict, args):
             var_dict[key].d = np.transpose(data_dict[key], (1, 0, 2))
             var_dict[key].data.cast(np.float32, args.ctx)
         else:
-            var_dict[key].d = (data_dict[key] - 1) * -1
-            var_dict[key].data.cast(np.int32, args.ctx)
+            # var_dict[key].d = (data_dict[key] - 1) * -1
+            var_dict[key].data.cast(np.float32, args.ctx)
             print(
                 f"nnabla {key} max {np.max(var_dict[key].d)} | " +
                 f"min {np.min(var_dict[key].d)}")
@@ -122,11 +126,8 @@ def pytorch_assign_data(data_dict):
 
     attention_mask = torch.tensor(
         data_dict['attention_mask'][:, None, None, :],
-        dtype=torch.int32, device=args.device)
-
-    print(
-        f"Pytorch attention_mask max {torch.max(attention_mask)} | " +
-        f"min {torch.min(attention_mask)}")
+        dtype=torch.float32, device=args.device)
+    attention_mask = (1.0 - attention_mask) * -10000.0
 
     return hs, attention_mask
 
@@ -156,6 +157,7 @@ def main(args):
     data_dict = get_sample_data("encoder_test_data.npz")
 
     # load pytorch model
+    torch.nn.modules.module.register_module_forward_hook(pytorch_hook)
     pyt_model = create_pytorch_model(args, False)
     py_weights = torch.load("pyt_encoder.pt", map_location=args.device)
     pyt_model.load_state_dict(py_weights)
@@ -163,8 +165,8 @@ def main(args):
     # load nnabla model
     setup_context(args)
     nn.clear_parameters()
-    nn_model_dict = create_nnabla_model(args)
     nn.load_parameters("nn_encoder.h5")
+    nn_model_dict = create_nnabla_model(args)
     # compare weights before data assignment
     print("weight comparision before data assignment")
     pyt_weight_dict = convert_pytorch_weights_to_nnabla(pyt_model.state_dict())
@@ -182,54 +184,22 @@ def main(args):
     print("weight comparision done\n")
 
     # forward
-    # nn_model_dict["model"].forward(
-    #     clear_no_need_grad=False, function_pre_hook=hook)
-    nn_model_dict["model"].forward(clear_no_need_grad=True)
-    # print(nn_model_dict["model"].d)
+    print("\n\n\n")
     pyt_output = pyt_model(hs, attention_mask)
-
-    # src_self_attn_1.retain_grad()
-    # src_1.retain_grad()
-    # src_affine.retain_grad()
-    # src_affine_1.retain_grad()
-    # src_2.retain_grad()
-
-    # # compare input variables
-    # print_and_plot_difference(
-    #     "hs", nn_model_dict["hs"],
-    #     hs, encoder_layer=True)
-
-    # # compare
-    # print_and_plot_difference(
-    #     "multi_head_attention", nn_model_dict["src_self_attn_1"],
-    #     src_self_attn_1, encoder_layer=True)
-
-    # print_and_plot_difference(
-    #     "layer_norm1", nn_model_dict["src_1"],
-    #     src_1, encoder_layer=True)
-
+    print("\n\n\n")
+    nn_model_dict["model"].forward(
+        clear_no_need_grad=False, function_post_hook=nnabla_hook)
+    # nn_model_dict["model"].forward(clear_no_need_grad=True)
+    print("\n\n\n")
     print_and_plot_difference(
         "encoder_out", nn_model_dict["model"], pyt_output, encoder_layer=True)
 
-
-def print_default_keys(args):
-    model = create_pytorch_inbuilt_model(args)
-    print("pytorch keys")
-    for key, value in model.state_dict().items():
-        print(f"{key} \t {value.shape}")
-
-    setup_context(args)
-    nn.clear_parameters()
-    create_nnabla_model(args)
-
-    print('nnabla keys')
-    for key, value in nn.get_parameters().items():
-        print(f"{key} \t {value.shape}")
+    pyt_ = create_pytorch_inbuilt_model(args)
+    for key, value in pyt_.state_dict().items():
+        print(f"{key} shape: {value.shape}")
 
 
 if __name__ == "__main__":
 
     args = get_args()
     main(args)
-    # test(args)
-    # print_default_keys(args)
