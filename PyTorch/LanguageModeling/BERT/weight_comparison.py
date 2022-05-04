@@ -25,6 +25,57 @@ def setting_seed(seed):
     torch.cuda.manual_seed(seed)
 
 
+def nnabla_forward_hook(f):
+    print(f"{f.name} | mean:{f.outputs[0].d.mean():>.6f} |"
+          f" max:{f.outputs[0].d.max():>.6f} | min:{f.outputs[0].d.min():>.6f} "
+          f"| std:{f.outputs[0].d.std():>.6f}")
+
+
+def nnabla_backward_hook(f):
+    print(f"{f.name} | mean:{f.outputs[0].g.mean():>.6f} |"
+          f" max:{f.outputs[0].g.max():>.6f} | min:{f.outputs[0].g.min():>.6f} "
+          f"| std:{f.outputs[0].g.std():>.6f}")
+
+
+def pytorch_forward_hook(self, input_d, output_d):
+    if isinstance(output_d, torch.Tensor):
+        print(f"{self.__class__.__name__} | mean:{output_d.mean():>.6f}"
+              f"| max:{output_d.max():>.6f} | min:{output_d.min():>.6f} "
+              f"| std:{output_d.std():>.6f})")
+    else:
+        for x in output_d:
+            if isinstance(x, torch.Tensor):
+                print(f"{self.__class__.__name__} | mean:{x.mean():>.6f}"
+                      f"| max:{x.max():>.6f} | min:{x.min():>.6f} "
+                      f"| std:{x.std():>.6f})")
+            else:
+                for y in x:
+                    if isinstance(x, torch.Tensor):
+                        print(f"{self.__class__.__name__} | mean:{x.mean():>.6f}"
+                              f"| max:{x.max():>.6f} | min:{x.min():>.6f} "
+                              f"| std:{x.std():>.6f})")
+
+
+def pytorch_backward_hook(self, grad_input, grad_output):
+    if isinstance(grad_output, torch.Tensor):
+        print(f"{self.__class__.__name__} | mean:{grad_output.mean():>.6f}"
+              f"| max:{grad_output.max():>.6f} | min:{grad_output.min():>.6f} "
+              f"| std:{grad_output.std():>.6f})")
+    else:
+        for x in grad_output:
+            if isinstance(x, torch.Tensor):
+                print(f"{self.__class__.__name__} | mean:{x.mean():>.6f}"
+                      f"| max:{x.max():>.6f} | min:{x.min():>.6f} "
+                      f"| std:{x.std():>.6f})")
+            else:
+                if x is not None:
+                    for y in x:
+                        if isinstance(x, torch.Tensor):
+                            print(f"{self.__class__.__name__} | mean:{x.mean():>.6f}"
+                                  f"| max:{x.max():>.6f} | min:{x.min():>.6f} "
+                                  f"| std:{x.std():>.6f})")
+
+
 class BertPretrainingCriterion(torch.nn.Module):
     def __init__(self, vocab_size):
         super(BertPretrainingCriterion, self).__init__()
@@ -137,25 +188,18 @@ def get_nnabla_model(args):
 
     nn.clear_parameters()
     model = BertModel()
-    [encoder, pooled, pooled_h, en_ft,
-     en_layers, embedding_output] = model(args, nn_input_ids,
-                                          nn_attention_mask,
-                                          nn_token_type_ids,
-                                          vocab_size=vocab_size)
-    encoder.persistent = True
-    pooled.persistent = True
-    pooled_h.persistent = True
-    en_ft.persistent = True
-    embedding_output.persistent = True
+    encoder, pooled = model(args, nn_input_ids,
+                            nn_attention_mask,
+                            nn_token_type_ids,
+                            vocab_size=vocab_size)
     mlm_pred, nsp_pred = bert_for_pre_training(encoder, pooled)
-    mlm_pred.persistent = True
-    nsp_pred.persistent = True
-    for i in range(len(en_layers)):
-        en_layers[i].persistent = True
 
     loss = bert_pretraining_criterion(
         mlm_pred, nsp_pred, MLM_labels, NSP_labels)
     loss.persistent = True
+    mlm_pred.persistent = True
+    nsp_pred.persistent = True
+
     return {"input_ids": nn_input_ids,
             "token_type_ids": nn_token_type_ids,
             "attention_mask": nn_attention_mask,
@@ -165,11 +209,7 @@ def get_nnabla_model(args):
             "nsp_pred": nsp_pred,
             "loss": loss,
             "encoder": encoder,
-            "pooled": pooled,
-            "pooled_h": pooled_h,
-            "en_ft": en_ft,
-            "en_layers": en_layers,
-            "embedding_output": embedding_output}
+            "pooled": pooled}
 
 
 def nnabla_assign_data(var_dict, data_dict, args):
@@ -222,15 +262,15 @@ def convert_pytorch_weights_to_nnabla(py_state_dict):
         if key not in new_weight_dict:
             new_weight_dict[key] = value
         else:
-            logger.error(f"{key} converted twice and " +
+            logger.error(f"{key} converted twice and "
                          f"is of shape {tuple(new_weight_dict[key].shape)}")
     return new_weight_dict
 
 
 def compare_weights(nnabla_weights, pytorch_weights):
     assert len(nnabla_weights) == len(pytorch_weights), (
-        "the weights length doesn't match. " +
-        f"nnabla weights len: {len(nnabla_weights)} " +
+        "the weights length doesn't match. "
+        f"nnabla weights len: {len(nnabla_weights)} "
         f"pytorch weights len : {len(pytorch_weights)}"
     )
     mismatch_weights = 0
@@ -288,13 +328,13 @@ def print_and_plot_difference(name: str, nn_var: nn.Variable, py_var,
 
     if not encoder_layer:
         assert nn_var.shape == py_var.shape, (
-            f"the shape of the nnabla variable {nn_var.shape} doesn't match " +
+            f"the shape of the nnabla variable {nn_var.shape} doesn't match "
             f"with the shape of PyTorch variable { py_var.shape}")
 
     else:
         assert F.transpose(nn_var, (1, 0, 2)).shape == py_var.shape, (
-            f"the shape of the nnabla variable" +
-            f" {F.transpose(nn_var, (1, 0, 2)).shape} doesn't match " +
+            f"the shape of the nnabla variable"
+            f" {F.transpose(nn_var, (1, 0, 2)).shape} doesn't match "
             f"with the shape of PyTorch variable { py_var.shape}")
     print_mean_max_min_std(f"{name}", nn_var.d,
                            type="NNabla_d", encoder_layer=encoder_layer)
@@ -322,9 +362,7 @@ def print_and_plot_difference(name: str, nn_var: nn.Variable, py_var,
 
 
 if __name__ == "__main__":
-    # create_sample_data(batch_size=32)
-    # create_sample_data()
-    # nn.auto_forward(True)
+
     plt.style.use("seaborn")
     logger.info('setting the seed.')
     setting_seed(12345)
@@ -343,7 +381,7 @@ if __name__ == "__main__":
     args.pytorch_weights = "pytorch_weights.pt"
 
     # pytorch device setting
-    args.local_rank = "0"
+    args.local_rank = "3"
     args.device = torch.device(f"cuda:{args.local_rank}")
 
     # create nnabla model and load weights
@@ -353,6 +391,9 @@ if __name__ == "__main__":
     logger.info(f"length of nnabla weights: {len(nn.get_parameters())}")
 
     # create pytorch model
+    torch.nn.modules.module.register_module_forward_hook(pytorch_forward_hook)
+    torch.nn.modules.module.register_module_full_backward_hook(pytorch_backward_hook)
+
     args.bert_config = "bert_config_base.json"
     py_model, py_loss_criteria = get_pytroch_model(args)
     py_weights = torch.load(args.pytorch_weights, map_location=args.device)
@@ -374,26 +415,17 @@ if __name__ == "__main__":
     # assign data to nnabla variable
     nnabla_assign_data(nn_model_dict, data_dict, args)
     # nnabla forward
-    nn_model_dict["loss"].forward(clear_no_need_grad=True)
-
+    print("\n\n\n")
+    nn_model_dict["loss"].forward(clear_no_need_grad=True,
+                                  function_post_hook=nnabla_forward_hook)
+    print("\n\n\n")
     # pytorch forward
     py_model.zero_grad()
     # create variable for pytorch
     ii, tti, am, mlm, nsp = pytorch_assign_data(args, data_dict)
-    [mlm_pred, nsp_pred, py_encoder, py_pooled,
-     pooled_h, en_ft, encoder_layers, embedding_output] = py_model(ii, tti, am)
+    mlm_pred, nsp_pred = py_model(ii, tti, am)
     py_loss = py_loss_criteria(mlm_pred, nsp_pred, mlm, nsp)
-    py_encoder.retain_grad()
-    py_pooled.retain_grad()
-    pooled_h.retain_grad()
-    en_ft.retain_grad()
-    mlm_pred.retain_grad()
-    nsp_pred.retain_grad()
-    py_loss.retain_grad()
-    embedding_output.retain_grad()
-    # for encoder_layers
-    for i, _ in enumerate(encoder_layers):
-        encoder_layers[i].retain_grad()
+    print("\n\n\n")
 
     # compare weight values after forward.
     logger.info('weight comparision after forward')
@@ -402,47 +434,15 @@ if __name__ == "__main__":
     compare_weights(nn_weight_dict, py_weight_dict)
     logger.info('weight comparision done')
 
+    print("\n\n\n")
     # compare weight values after backward.
-    nn_model_dict["loss"].backward(clear_buffer=True)
+    nn_model_dict["loss"].backward(clear_buffer=True,
+                                   function_post_hook=nnabla_backward_hook)
+    print("\n\n\n")
     py_loss.backward()
+    print("\n\n\n")
     logger.info('weight comparision after backward')
     nn_weight_dict = nn.get_parameters()
     py_weight_dict = convert_pytorch_weights_to_nnabla(py_model.state_dict())
     compare_weights(nn_weight_dict, py_weight_dict)
     logger.info('weight comparision done')
-
-    # compute variables difference.
-    print("variable name \t\tmean\t\tmax\t\tmin\t\tstd")
-
-    print_and_plot_difference(
-        "input_ids", nn_model_dict["input_ids"], ii, for_grad=False)
-    print_and_plot_difference(
-        "token_type_ids", nn_model_dict["token_type_ids"], tti, for_grad=False)
-    print_and_plot_difference(
-        "attention_mask", nn_model_dict["attention_mask"], am, for_grad=False)
-    print_and_plot_difference(
-        "MLM_label", nn_model_dict["MLM_label"], mlm, for_grad=False)
-    print_and_plot_difference(
-        "NSP_label", nn_model_dict["NSP_label"], nsp, for_grad=False)
-
-    print_and_plot_difference(
-        "embedding_output", nn_model_dict["embedding_output"],
-        embedding_output)
-
-    for i, ens in enumerate(zip(nn_model_dict["en_layers"], encoder_layers)):
-        nn_en, py_en = ens
-        inx = i+1
-        print_and_plot_difference(f"encoder_{inx}", nn_en, py_en,
-                                  base_dir="plots/encoders",
-                                  for_grad=False,
-                                  encoder_layer=True,
-                                  create_hist=True)
-
-    print_and_plot_difference(
-        "final encoder", nn_model_dict["encoder"], py_encoder)
-    print_and_plot_difference("en_ft", nn_model_dict["en_ft"], en_ft)
-    print_and_plot_difference("pooled_h", nn_model_dict["pooled_h"], pooled_h)
-    print_and_plot_difference("pooled", nn_model_dict["pooled"], py_pooled)
-    print_and_plot_difference("mlm_pred", nn_model_dict["mlm_pred"], mlm_pred)
-    print_and_plot_difference("nsp_pred", nn_model_dict["nsp_pred"], nsp_pred)
-    print_and_plot_difference("loss", nn_model_dict["loss"], py_loss)
