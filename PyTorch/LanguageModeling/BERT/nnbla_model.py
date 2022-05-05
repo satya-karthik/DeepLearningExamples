@@ -22,7 +22,7 @@ from nnabla.initializer import ConstantInitializer
 
 def bert_embed(input_ids, token_type_ids=None,
                position_ids=None, vocab_size=30522, embed_dim=768,
-               num_pos_ids=512, dropout_prob=0.1, test=True):
+               num_pos_ids=512, dropout_prob=0.0, test=True):
     """Construct the embeddings from word, position and token type."""
 
     batch_size = input_ids.shape[0]
@@ -56,7 +56,7 @@ def bert_embed(input_ids, token_type_ids=None,
 def bert_layer(hs, num_layers=12, embed_dim=768, num_heads=12,
                dim_feedforward=3072, activation=None, attention_mask=None,
                head_mask=None, encoder_hidden_states=None,
-               encoder_attention_mask=None, dropout_prob=0.1, test=True):
+               encoder_attention_mask=None, dropout_prob=0.0, test=True):
     """ Generate Transformer Layers"""
     # Transpose the input to the shape (L,B,E) accepted by parameter
     # function transformer_encode
@@ -66,13 +66,15 @@ def bert_layer(hs, num_layers=12, embed_dim=768, num_heads=12,
             hs = PF.transformer_encode(hs, embed_dim, num_heads,
                                        dim_feedforward=dim_feedforward,
                                        dropout=0.0, activation=activation,
-                                       name='encoder{:02d}'.format(i))
+                                       name='encoder{:02d}'.format(i),
+                                       src_key_padding_mask=attention_mask)
         else:
             hs = PF.transformer_encode(hs, embed_dim, num_heads,
                                        dim_feedforward=dim_feedforward,
-                                       dropout=dropout_prob,
+                                       dropout=0.0,
                                        activation=activation,
-                                       name='encoder{:02d}'.format(i))
+                                       name='encoder{:02d}'.format(i),
+                                       src_key_padding_mask=attention_mask)
     # Transpose back to (B,L,E)
     self_outputs = F.transpose(hs, (1, 0, 2))
 
@@ -84,7 +86,7 @@ def bert_encode(hs, attention_mask=None, head_mask=None,
                 num_attention_embed_dim=768, num_attention_heads=12,
                 num_attention_dim_feedforward=3072, attention_activation=None,
                 encoder_hidden_states=None, encoder_attention_mask=None,
-                dropout_prob=0.1, test=True):
+                dropout_prob=0.0, test=True):
     layer_outputs = bert_layer(hs, num_layers=num_attention_layers,
                                embed_dim=num_attention_embed_dim,
                                num_heads=num_attention_heads,
@@ -94,7 +96,7 @@ def bert_encode(hs, attention_mask=None, head_mask=None,
                                head_mask=head_mask,
                                encoder_hidden_states=encoder_hidden_states,
                                encoder_attention_mask=encoder_attention_mask,
-                               dropout_prob=dropout_prob, test=test)
+                               dropout_prob=0.0, test=test)
 
     return layer_outputs
 
@@ -167,8 +169,8 @@ class BertModel():
                  num_embed_dim=768, num_pos_ids=512,
                  num_attention_layers=12, num_attention_embed_dim=768,
                  num_attention_heads=12, num_attention_dim_feedforward=3072,
-                 attention_activation=None, pool_outmap=768,
-                 embed_dropout_prob=0.1, attention_dropout_prob=0.1,
+                 attention_activation=F.gelu, pool_outmap=768,
+                 embed_dropout_prob=0.0, attention_dropout_prob=0.0,
                  encoder_hidden_states=None, encoder_attention_mask=None,
                  test=True):
 
@@ -188,7 +190,7 @@ class BertModel():
                              f"(shape {input_shape})" +
                              " or attention_mask " +
                              f"(shape {attention_mask.shape})")
-
+        # QUESTION never used in the code
         extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
 
         encoder_extended_attention_mask = None
@@ -199,7 +201,7 @@ class BertModel():
                                       vocab_size=vocab_size,
                                       embed_dim=num_embed_dim,
                                       num_pos_ids=num_pos_ids,
-                                      dropout_prob=embed_dropout_prob,
+                                      dropout_prob=0.0,
                                       test=test)
 
         encoder_output = bert_encode(
@@ -213,7 +215,7 @@ class BertModel():
             attention_activation=attention_activation,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_extended_attention_mask,
-            dropout_prob=args.attention_dropout, test=test)
+            dropout_prob=0.0, test=test)
 
         pooled_output = bert_pool(encoder_output, out_dim=pool_outmap)
         return encoder_output, pooled_output
