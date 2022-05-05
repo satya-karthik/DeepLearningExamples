@@ -13,16 +13,55 @@ from weight_comparison import print_and_plot_difference, setup_context
 from nnabla.logger import logger
 
 
-def nnabla_hook(f):
-    print(f"{f.name} | mean:{f.outputs[0].d.mean():>.6f} |" +
-          f" max:{f.outputs[0].d.max():>.6f} | min:{f.outputs[0].d.min():>.6f} " +
+def nnabla_forward_hook(f):
+    print(f"{f.name} | mean:{f.outputs[0].d.mean():>.6f} |"
+          f" max:{f.outputs[0].d.max():>.6f} | min:{f.outputs[0].d.min():>.6f} "
           f"| std:{f.outputs[0].d.std():>.6f}")
 
 
-def pytorch_hook(self, input_d, output_d):
-    print(f"{self.__class__.__name__} | mean:{output_d.mean():>.6f}" +
-          f"| max:{output_d.max():>.6f} | min:{output_d.min():>.6f} " +
-          f"| std:{output_d.std():>.6f})")
+def nnabla_backward_hook(f):
+    print(f"{f.name} | mean:{f.outputs[0].g.mean():>.6f} |"
+          f" max:{f.outputs[0].g.max():>.6f} | min:{f.outputs[0].g.min():>.6f} "
+          f"| std:{f.outputs[0].g.std():>.6f}")
+
+
+def pytorch_forward_hook(self, input_d, output_d):
+    if isinstance(output_d, torch.Tensor):
+        print(f"{self.__class__.__name__} | mean:{output_d.mean():>.6f}"
+              f"| max:{output_d.max():>.6f} | min:{output_d.min():>.6f} "
+              f"| std:{output_d.std():>.6f})")
+    else:
+        for x in output_d:
+            if isinstance(x, torch.Tensor):
+                print(f"{self.__class__.__name__} | mean:{x.mean():>.6f}"
+                      f"| max:{x.max():>.6f} | min:{x.min():>.6f} "
+                      f"| std:{x.std():>.6f})")
+            else:
+                for y in x:
+                    if isinstance(x, torch.Tensor):
+                        print(f"{self.__class__.__name__} | mean:{x.mean():>.6f}"
+                              f"| max:{x.max():>.6f} | min:{x.min():>.6f} "
+                              f"| std:{x.std():>.6f})")
+
+
+def pytorch_backward_hook(self, grad_input, grad_output):
+    if isinstance(grad_output, torch.Tensor):
+        print(f"{self.__class__.__name__} | mean:{grad_output.mean():>.6f}"
+              f"| max:{grad_output.max():>.6f} | min:{grad_output.min():>.6f} "
+              f"| std:{grad_output.std():>.6f})")
+    else:
+        for x in grad_output:
+            if isinstance(x, torch.Tensor):
+                print(f"{self.__class__.__name__} | mean:{x.mean():>.6f}"
+                      f"| max:{x.max():>.6f} | min:{x.min():>.6f} "
+                      f"| std:{x.std():>.6f})")
+            else:
+                if x is not None:
+                    for y in x:
+                        if isinstance(x, torch.Tensor):
+                            print(f"{self.__class__.__name__} | mean:{x.mean():>.6f}"
+                                  f"| max:{x.max():>.6f} | min:{x.min():>.6f} "
+                                  f"| std:{x.std():>.6f})")
 
 
 def get_args():
@@ -66,14 +105,13 @@ def create_nnabla_model(args):
     # we are creating a transposed hs
     hs = nn.Variable([args.seq_len, args.batch_size, args.embed_dim])
     attention_mask = nn.Variable([args.batch_size, args.seq_len])
-    extended_attention_mask = (1.0 - attention_mask) * -10000.0
-    print(f"extended mask {extended_attention_mask.shape} ")
+    # extended_attention_mask = (1.0 - attention_mask) * -10000.0
     encoder = PF.transformer_encode(hs, args.embed_dim, args.num_heads,
                                     dim_feedforward=args.dim_feedforward,
                                     dropout=0.0, activation=F.gelu,
                                     name='encoder01',
-                                    src_additive_mask=extended_attention_mask,
-                                    src_key_padding_mask=None)
+                                    src_additive_mask=None,
+                                    src_key_padding_mask=attention_mask)
 
     model = {}
     model["model"] = encoder
@@ -116,7 +154,7 @@ def nnabla_assign_data(var_dict, data_dict, args):
             # var_dict[key].d = (data_dict[key] - 1) * -1
             var_dict[key].data.cast(np.float32, args.ctx)
             print(
-                f"nnabla {key} max {np.max(var_dict[key].d)} | " +
+                f"nnabla {key} max {np.max(var_dict[key].d)} | "
                 f"min {np.min(var_dict[key].d)}")
 
 
@@ -139,7 +177,7 @@ def convert_pytorch_weights_to_nnabla(py_state_dict):
         if key not in new_weight_dict:
             new_weight_dict[key] = value
         else:
-            logger.error(f"{key} converted twice and " +
+            logger.error(f"{key} converted twice and "
                          f"is of shape {tuple(new_weight_dict[key].shape)}")
     return new_weight_dict
 
@@ -157,7 +195,8 @@ def main(args):
     data_dict = get_sample_data("encoder_test_data.npz")
 
     # load pytorch model
-    torch.nn.modules.module.register_module_forward_hook(pytorch_hook)
+    torch.nn.modules.module.register_module_forward_hook(pytorch_forward_hook)
+    torch.nn.modules.module.register_module_full_backward_hook(pytorch_backward_hook)
     pyt_model = create_pytorch_model(args, False)
     py_weights = torch.load("pyt_encoder.pt", map_location=args.device)
     pyt_model.load_state_dict(py_weights)
@@ -165,8 +204,8 @@ def main(args):
     # load nnabla model
     setup_context(args)
     nn.clear_parameters()
-    nn.load_parameters("nn_encoder.h5")
     nn_model_dict = create_nnabla_model(args)
+    nn.load_parameters("nn_encoder.h5")
     # compare weights before data assignment
     print("weight comparision before data assignment")
     pyt_weight_dict = convert_pytorch_weights_to_nnabla(pyt_model.state_dict())
@@ -188,15 +227,18 @@ def main(args):
     pyt_output = pyt_model(hs, attention_mask)
     print("\n\n\n")
     nn_model_dict["model"].forward(
-        clear_no_need_grad=False, function_post_hook=nnabla_hook)
+        clear_no_need_grad=True, function_post_hook=nnabla_forward_hook)
     # nn_model_dict["model"].forward(clear_no_need_grad=True)
     print("\n\n\n")
     print_and_plot_difference(
         "encoder_out", nn_model_dict["model"], pyt_output, encoder_layer=True)
 
-    pyt_ = create_pytorch_inbuilt_model(args)
-    for key, value in pyt_.state_dict().items():
-        print(f"{key} shape: {value.shape}")
+    print("\n\n\n")
+    pyt_output.mean().backward()
+    print("\n\n\n")
+
+    nn_model_dict["model"].backward(
+        clear_buffer=True, function_post_hook=nnabla_backward_hook)
 
 
 if __name__ == "__main__":
