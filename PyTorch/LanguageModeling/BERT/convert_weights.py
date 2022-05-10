@@ -52,18 +52,21 @@ def rename_params(key,v):
         if 'query.weight' in key:
             key = 'encoder{:02d}/transformer_encode/src_self_attn/multi_head_attention/q_weight'.format(
                 layer_id)
+            v = numpy.transpose(v)
         if 'key.bias' in key:
             key = 'encoder{:02d}/transformer_encode/src_self_attn/multi_head_attention/k_bias'.format(
                 layer_id)
         if 'key.weight' in key:
             key = 'encoder{:02d}/transformer_encode/src_self_attn/multi_head_attention/k_weight'.format(
                 layer_id)
+            v = numpy.transpose(v)
         if 'value.bias' in key:
             key = 'encoder{:02d}/transformer_encode/src_self_attn/multi_head_attention/v_bias'.format(
                 layer_id)
         if 'value.weight' in key:
             key = 'encoder{:02d}/transformer_encode/src_self_attn/multi_head_attention/v_weight'.format(
             layer_id)
+            v = numpy.transpose(v)
         if 'attention.output.LayerNorm.bias' in key:
             key = 'encoder{:02d}/transformer_encode/enc_layer_norm1/layer_normalization/beta'.format(
             layer_id)
@@ -92,6 +95,7 @@ def rename_params(key,v):
         if 'attention.output.dense.weight' in key:
             key = 'encoder{:02d}/transformer_encode/src_self_attn/multi_head_attention/out_weight'.format(
             layer_id)
+            v = numpy.transpose(v)
         elif 'output.dense.weight' in key:
             key = 'encoder{:02d}/transformer_encode/enc_affine2/affine/W'.format(
                 layer_id)
@@ -132,8 +136,9 @@ def rename_params(key,v):
         key = 'affine_seq_class/affine/b'
     
     # perfect matches
-    if  key.lower() == "cls.predictions.transform.dense_act.weight".lower():
-        key = "mlm/linear/affine/W" 
+    if key.lower() == "cls.predictions.transform.dense_act.weight".lower():
+        key = "mlm/linear/affine/W"
+        v = numpy.transpose(v)
     if key.lower() == "cls.predictions.transform.dense_act.bias".lower():
         key = "mlm/linear/affine/b"
     if key.lower() == "cls.predictions.bias".lower():
