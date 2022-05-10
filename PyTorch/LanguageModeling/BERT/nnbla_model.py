@@ -30,7 +30,7 @@ def bert_embed(input_ids, token_type_ids=None,
     if position_ids is None:
         position_ids = F.arange(0, seq_len)
         position_ids = F.broadcast(F.reshape(
-            position_ids, (1,)+position_ids.shape),
+            position_ids, (1,) + position_ids.shape),
             (batch_size,) + position_ids.shape)
     if token_type_ids is None:
         token_type_ids = F.constant(val=0, shape=(batch_size, seq_len))
@@ -61,6 +61,7 @@ def bert_layer(hs, num_layers=12, embed_dim=768, num_heads=12,
     # Transpose the input to the shape (L,B,E) accepted by parameter
     # function transformer_encode
     hs = F.transpose(hs, (1, 0, 2))
+    layers = []
     for i in range(num_layers):
         if test:
             hs = PF.transformer_encode(hs, embed_dim, num_heads,
@@ -75,10 +76,12 @@ def bert_layer(hs, num_layers=12, embed_dim=768, num_heads=12,
                                        activation=activation,
                                        name='encoder{:02d}'.format(i),
                                        src_key_padding_mask=attention_mask)
+        layers.append(hs)
+
     # Transpose back to (B,L,E)
     self_outputs = F.transpose(hs, (1, 0, 2))
 
-    return self_outputs
+    return self_outputs, layers
 
 
 def bert_encode(hs, attention_mask=None, head_mask=None,
@@ -87,18 +90,18 @@ def bert_encode(hs, attention_mask=None, head_mask=None,
                 num_attention_dim_feedforward=3072, attention_activation=None,
                 encoder_hidden_states=None, encoder_attention_mask=None,
                 dropout_prob=0.0, test=True):
-    layer_outputs = bert_layer(hs, num_layers=num_attention_layers,
-                               embed_dim=num_attention_embed_dim,
-                               num_heads=num_attention_heads,
-                               dim_feedforward=num_attention_dim_feedforward,
-                               activation=attention_activation,
-                               attention_mask=attention_mask,
-                               head_mask=head_mask,
-                               encoder_hidden_states=encoder_hidden_states,
-                               encoder_attention_mask=encoder_attention_mask,
-                               dropout_prob=0.0, test=test)
+    layer_outputs, layers = bert_layer(hs, num_layers=num_attention_layers,
+                                       embed_dim=num_attention_embed_dim,
+                                       num_heads=num_attention_heads,
+                                       dim_feedforward=num_attention_dim_feedforward,
+                                       activation=attention_activation,
+                                       attention_mask=attention_mask,
+                                       head_mask=head_mask,
+                                       encoder_hidden_states=encoder_hidden_states,
+                                       encoder_attention_mask=encoder_attention_mask,
+                                       dropout_prob=0.0, test=test)
 
-    return layer_outputs
+    return layer_outputs, layers
 
 
 def bert_pool(hs, out_dim=768):
@@ -144,12 +147,12 @@ def linear_activation(x: nnabla.Variable,
 
     # NOTE: this is as per the nvidia-code
     #  we use uniform Initializer for our bias
-    bound = 1/(x.shape[-1])**0.5
+    bound = 1 / (x.shape[-1])**0.5
     b = Initializer.UniformInitializer(lim=(-bound, bound))
 
     with nnabla.parameter_scope(f"{layer_name}"):
         y = F.gelu(PF.affine(x, x.shape[-1], w_init=w, b_init=b,
-                             base_axis=len(x.shape)-1))
+                             base_axis=len(x.shape) - 1))
 
     # if not will raise error.
     if x.shape != y.shape:
@@ -204,7 +207,7 @@ class BertModel():
                                       dropout_prob=0.0,
                                       test=test)
 
-        encoder_output = bert_encode(
+        encoder_output, layers = bert_encode(
             embedding_output,
             attention_mask=attention_mask,
             head_mask=head_mask,
@@ -218,7 +221,7 @@ class BertModel():
             dropout_prob=0.0, test=test)
 
         pooled_output = bert_pool(encoder_output, out_dim=pool_outmap)
-        return encoder_output, pooled_output
+        return encoder_output, pooled_output, layers, embedding_output
 
 
 def bert_for_pre_training(encoder_output: nnabla.Variable,
@@ -247,7 +250,7 @@ def bert_for_pre_training(encoder_output: nnabla.Variable,
 
     # this is the output for MLM task
     mlm_pred = PF.affine(encoder_output, vocab_size,
-                         base_axis=len(encoder_output.shape)-1,
+                         base_axis=len(encoder_output.shape) - 1,
                          w_init=embed_weight, b_init=ConstantInitializer(0),
                          name='mlm')
 
