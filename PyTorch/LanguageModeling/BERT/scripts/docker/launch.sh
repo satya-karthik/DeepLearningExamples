@@ -32,7 +32,7 @@ fi
 
 
 # you can configure ipc and net flags as per your requirements.
-docker_run_user --name $CONTAINER_NAME  -it --rm \
+docker_run_user --name $CONTAINER_NAME -it --rm \
     --gpus device=all \
     --net=host \
     --ipc=host \

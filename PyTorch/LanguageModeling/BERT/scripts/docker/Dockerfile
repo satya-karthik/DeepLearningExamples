@@ -14,6 +14,8 @@
 ARG FROM_IMAGE_NAME=nvcr.io/nvidia/pytorch:21.09-py3
 FROM nvcr.io/nvidia/tritonserver:20.06-v1-py3-clientsdk as trt
 FROM ${FROM_IMAGE_NAME}
+
+USER root
 RUN apt-get update && apt-get install -y pbzip2 pv bzip2 cabextract
 
 ENV BERT_PREP_WORKING_DIR /data
@@ -37,7 +39,7 @@ RUN pip install /workspace/install/python/tensorrtserver*.whl
 WORKDIR /workspace/bert
 RUN pip install --no-cache-dir \
     tqdm boto3 requests six ipdb h5py nltk progressbar onnxruntime \
-    flake8 autopep8 rope pylint \
+    flake8 autopep8 rope pylint pandas \
     nnabla nnabla_ext_cuda110_nccl2_mpi3_1_6 \
     git+https://github.com/NVIDIA/dllogger wget
 
