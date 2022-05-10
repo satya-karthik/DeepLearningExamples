@@ -142,11 +142,14 @@ models
 
 # logs
 **/logs
+**/runs
 
 # weights
 *.pt
 *.h5
-
+*.nnp
+*.onnx
 #data
 *.npz
 *.jpg
+*.png
