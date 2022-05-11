@@ -27,13 +27,15 @@ def setting_seed(seed):
 
 def nnabla_forward_hook(f):
     print(f"{f.name} | mean:{f.outputs[0].d.mean():>.6f} |"
-          f" max:{f.outputs[0].d.max():>.6f} | min:{f.outputs[0].d.min():>.6f} "
+          f" max:{f.outputs[0].d.max():>.6f} "
+          f"| min:{f.outputs[0].d.min():>.6f} "
           f"| std:{f.outputs[0].d.std():>.6f}")
 
 
 def nnabla_backward_hook(f):
     print(f"{f.name} | mean:{f.outputs[0].g.mean():>.6f} |"
-          f" max:{f.outputs[0].g.max():>.6f} | min:{f.outputs[0].g.min():>.6f} "
+          f" max:{f.outputs[0].g.max():>.6f} "
+          f"| min:{f.outputs[0].g.min():>.6f} "
           f"| std:{f.outputs[0].g.std():>.6f}")
 
 
@@ -51,7 +53,8 @@ def pytorch_forward_hook(self, input_d, output_d):
             else:
                 for y in x:
                     if isinstance(x, torch.Tensor):
-                        print(f"{self.__class__.__name__} | mean:{x.mean():>.6f}"
+                        print(f"{self.__class__.__name__} "
+                              f"| mean:{x.mean():>.6f}"
                               f"| max:{x.max():>.6f} | min:{x.min():>.6f} "
                               f"| std:{x.std():>.6f})")
 
@@ -71,7 +74,8 @@ def pytorch_backward_hook(self, grad_input, grad_output):
                 if x is not None:
                     for y in x:
                         if isinstance(x, torch.Tensor):
-                            print(f"{self.__class__.__name__} | mean:{x.mean():>.6f}"
+                            print(f"{self.__class__.__name__} "
+                                  f"| mean:{x.mean():>.6f}"
                                   f"| max:{x.max():>.6f} | min:{x.min():>.6f} "
                                   f"| std:{x.std():>.6f})")
 
@@ -392,7 +396,8 @@ if __name__ == "__main__":
 
     # create pytorch model
     torch.nn.modules.module.register_module_forward_hook(pytorch_forward_hook)
-    torch.nn.modules.module.register_module_full_backward_hook(pytorch_backward_hook)
+    torch.nn.modules.module.register_module_full_backward_hook(
+        pytorch_backward_hook)
 
     args.bert_config = "bert_config_base.json"
     py_model, py_loss_criteria = get_pytroch_model(args)

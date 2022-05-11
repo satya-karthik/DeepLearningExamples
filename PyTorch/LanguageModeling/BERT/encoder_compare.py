@@ -15,13 +15,15 @@ from nnabla.logger import logger
 
 def nnabla_forward_hook(f):
     print(f"{f.name} | mean:{f.outputs[0].d.mean():>.6f} |"
-          f" max:{f.outputs[0].d.max():>.6f} | min:{f.outputs[0].d.min():>.6f} "
+          f" max:{f.outputs[0].d.max():>.6f} "
+          f"| min:{f.outputs[0].d.min():>.6f} "
           f"| std:{f.outputs[0].d.std():>.6f}")
 
 
 def nnabla_backward_hook(f):
     print(f"{f.name} | mean:{f.outputs[0].g.mean():>.6f} |"
-          f" max:{f.outputs[0].g.max():>.6f} | min:{f.outputs[0].g.min():>.6f} "
+          f" max:{f.outputs[0].g.max():>.6f} "
+          f"| min:{f.outputs[0].g.min():>.6f} "
           f"| std:{f.outputs[0].g.std():>.6f}")
 
 
@@ -39,7 +41,8 @@ def pytorch_forward_hook(self, input_d, output_d):
             else:
                 for y in x:
                     if isinstance(x, torch.Tensor):
-                        print(f"{self.__class__.__name__} | mean:{x.mean():>.6f}"
+                        print(f"{self.__class__.__name__} "
+                              f"| mean:{x.mean():>.6f}"
                               f"| max:{x.max():>.6f} | min:{x.min():>.6f} "
                               f"| std:{x.std():>.6f})")
 
@@ -59,7 +62,8 @@ def pytorch_backward_hook(self, grad_input, grad_output):
                 if x is not None:
                     for y in x:
                         if isinstance(x, torch.Tensor):
-                            print(f"{self.__class__.__name__} | mean:{x.mean():>.6f}"
+                            print(f"{self.__class__.__name__} "
+                                  f"| mean:{x.mean():>.6f}"
                                   f"| max:{x.max():>.6f} | min:{x.min():>.6f} "
                                   f"| std:{x.std():>.6f})")
 
@@ -70,7 +74,7 @@ def get_args():
                         default="bert_config_base.json",
                         type=str)
     args = parser.parse_args()
-    args.local_rank = "0"
+    args.local_rank = "3"
     args.device = torch.device(f"cuda:{args.local_rank}")
     args.batch_size = 32
     args.num_heads = 12
@@ -109,7 +113,7 @@ def create_nnabla_model(args):
     encoder = PF.transformer_encode(hs, args.embed_dim, args.num_heads,
                                     dim_feedforward=args.dim_feedforward,
                                     dropout=0.0, activation=F.gelu,
-                                    name='encoder01',
+                                    name='encoder00',
                                     src_additive_mask=None,
                                     src_key_padding_mask=attention_mask)
 
@@ -196,7 +200,8 @@ def main(args):
 
     # load pytorch model
     torch.nn.modules.module.register_module_forward_hook(pytorch_forward_hook)
-    torch.nn.modules.module.register_module_full_backward_hook(pytorch_backward_hook)
+    torch.nn.modules.module.register_module_full_backward_hook(
+        pytorch_backward_hook)
     pyt_model = create_pytorch_model(args, False)
     py_weights = torch.load("pyt_encoder.pt", map_location=args.device)
     pyt_model.load_state_dict(py_weights)
