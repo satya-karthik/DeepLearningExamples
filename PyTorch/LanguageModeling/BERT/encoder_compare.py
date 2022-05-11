@@ -110,31 +110,51 @@ def create_nnabla_model(args):
     hs = nn.Variable([args.seq_len, args.batch_size, args.embed_dim])
     attention_mask = nn.Variable([args.batch_size, args.seq_len])
     # extended_attention_mask = (1.0 - attention_mask) * -10000.0
-    encoder = PF.transformer_encode(hs, args.embed_dim, args.num_heads,
-                                    dim_feedforward=args.dim_feedforward,
-                                    dropout=0.0, activation=F.gelu,
-                                    name='encoder00',
-                                    src_additive_mask=None,
-                                    src_key_padding_mask=attention_mask)
-
     model = {}
-    model["model"] = encoder
-    model["model"].persistent = True
-
     model['hs'] = hs
+    layers = []
+    for i in range(3):
+        hs = PF.transformer_encode(hs, args.embed_dim, args.num_heads,
+                                   dim_feedforward=args.dim_feedforward,
+                                   dropout=0.0, activation=F.gelu,
+                                   name=f"encoder{i:0>2d}",
+                                   src_additive_mask=None,
+                                   src_key_padding_mask=attention_mask)
+        layers.append(hs)
+
+    model["model"] = hs
+    model["layers"] = layers
+    for M in model["layers"]:
+        M.persistent = True
+    # model["model"].persistent = True
     model['attention_mask'] = attention_mask
     return model
+
+
+class BertEncoder(torch.nn.Module):
+    def __init__(self, config, num_module):
+        super(BertEncoder, self).__init__()
+        self.layers = torch.nn.ModuleList(
+            [BertLayer(config) for _ in range(num_module)])
+        self.num_module = num_module
+
+    def forward(self, hs, attention_mask):
+        layers_list = []
+        for layer in self.layers:
+            hs = layer(hs, attention_mask)
+            layers_list.append(hs)
+        return hs, layers_list
 
 
 def create_pytorch_model(args, save_weights=False):
 
     # bert encoder
     config = BertConfig(args.config)
-    encoder = BertLayer(config)
+    encoder = BertEncoder(config, 3)
     encoder = encoder.to(args.device)
     encoder.eval()
     if save_weights:
-        torch.save(encoder.state_dict(), 'pyt_encoder.pt')
+        torch.save(encoder.state_dict(), 'pyt_multi_encoder.pt')
     return encoder
 
 
@@ -203,14 +223,14 @@ def main(args):
     torch.nn.modules.module.register_module_full_backward_hook(
         pytorch_backward_hook)
     pyt_model = create_pytorch_model(args, False)
-    py_weights = torch.load("pyt_encoder.pt", map_location=args.device)
+    py_weights = torch.load('pyt_multi_encoder.pt', map_location=args.device)
     pyt_model.load_state_dict(py_weights)
 
     # load nnabla model
     setup_context(args)
     nn.clear_parameters()
     nn_model_dict = create_nnabla_model(args)
-    nn.load_parameters("nn_encoder.h5")
+    nn.load_parameters("nn_multi_encoder.h5")
     # compare weights before data assignment
     print("weight comparision before data assignment")
     pyt_weight_dict = convert_pytorch_weights_to_nnabla(pyt_model.state_dict())
@@ -229,14 +249,17 @@ def main(args):
 
     # forward
     print("\n\n\n")
-    pyt_output = pyt_model(hs, attention_mask)
+    pyt_output, pyt_layers = pyt_model(hs, attention_mask)
     print("\n\n\n")
     nn_model_dict["model"].forward(
         clear_no_need_grad=True, function_post_hook=nnabla_forward_hook)
     # nn_model_dict["model"].forward(clear_no_need_grad=True)
     print("\n\n\n")
-    print_and_plot_difference(
-        "encoder_out", nn_model_dict["model"], pyt_output, encoder_layer=True)
+
+    for i in range(len(pyt_layers)):
+        print_and_plot_difference(
+            f"encoder_{i}_out", nn_model_dict["layers"][i],
+            pyt_layers[i], encoder_layer=True)
 
     print("\n\n\n")
     pyt_output.mean().backward()

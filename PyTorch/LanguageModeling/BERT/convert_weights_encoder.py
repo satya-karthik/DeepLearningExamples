@@ -44,7 +44,7 @@ def pytorch_to_nn_param_map():
 
 
 def rename_params(key: str, v):
-    idx = key.split('.')[0]
+    idx = key.split('.')[1]
     layer_id = int(idx) if idx.isnumeric() else 0
     if 'query.bias' in key:
         key = (f"encoder{layer_id:02d}/transformer_encode/"
