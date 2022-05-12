@@ -225,7 +225,10 @@ def get_nnabla_model(args):
 
 def nnabla_assign_data(var_dict, data_dict, args):
     for key in data_dict:
-        var_dict[key].d = data_dict[key]
+        if key == "attention_mask":
+            var_dict[key].d = (data_dict[key]-1) * -1
+        else:
+            var_dict[key].d = data_dict[key]
         var_dict[key].data.cast(np.int32, args.ctx)
 
 
@@ -387,7 +390,9 @@ if __name__ == "__main__":
     args.batch_size = 32
     args.vocab_size = 30528
     args.sequence_length = 128
-
+    # create_sample_data(vocab_size=args.vocab_size,
+    #                    batch_size=args.batch_size,
+    #                    sequence_length=args.sequence_length)
     args.nnabla_weights = "nnabla_weights.h5"
     args.pytorch_weights = "pytorch_weights.pt"
 
