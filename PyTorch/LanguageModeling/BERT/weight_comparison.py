@@ -364,6 +364,8 @@ def print_and_plot_difference(name: str, nn_var: nn.Variable, py_var,
         generate_histogram(f"{name}", diff_d.reshape(-1), base_dir=base_dir)
     if for_grad:
         py_var_g = py_var.grad.cpu().numpy()
+        if encoder_layer:
+            py_var_g = np.transpose(py_var_g, (1, 0, 2))
         print_mean_max_min_std(f"{name}", nn_var.g,
                                type="NNabla_g", encoder_layer=encoder_layer)
         print_mean_max_min_std(f"{name}", py_var_g, type="PyTorch_g")
@@ -455,15 +457,15 @@ if __name__ == "__main__":
     logger.info('weight comparision done')
 
     # compare weight values after backward.
-    # nn_model_dict["loss"].backward(clear_buffer=True)
-    # py_loss.backward()
-    # logger.info('weight comparision after backward')
-    # nn_weight_dict = nn.get_parameters()
-    # py_weight_dict = convert_pytorch_weights_to_nnabla(py_model.state_dict())
-    # compare_weights(nn_weight_dict, py_weight_dict)
-    # logger.info('weight comparision done')
+    nn_model_dict["loss"].backward(clear_buffer=True)
+    py_loss.backward()
+    logger.info('weight comparision after backward')
+    nn_weight_dict = nn.get_parameters()
+    py_weight_dict = convert_pytorch_weights_to_nnabla(py_model.state_dict())
+    compare_weights(nn_weight_dict, py_weight_dict)
+    logger.info('weight comparision done')
 
-    # compute variables difference.
+    # compute variables data difference.
     print("variable name \t\tmean\t\tmax\t\tmin\t\tstd")
 
     print_and_plot_difference(
@@ -479,20 +481,22 @@ if __name__ == "__main__":
 
     print_and_plot_difference(
         "embedding_output", nn_model_dict["embedding_output"],
-        embedding_output)
+        embedding_output, for_grad=True)
 
     for i, ens in enumerate(zip(nn_model_dict["en_layers"], encoder_layers)):
         nn_en, py_en = ens
         inx = i + 1
         print_and_plot_difference(f"encoder_{inx}", nn_en, py_en,
                                   base_dir="plots/encoders",
-                                  for_grad=False,
+                                  for_grad=True,
                                   encoder_layer=True,
-                                  create_hist=True)
+                                  create_hist=False)
 
     print_and_plot_difference(
-        "final encoder", nn_model_dict["encoder"], py_encoder)
-    print_and_plot_difference("pooled", nn_model_dict["pooled"], py_pooled)
-    print_and_plot_difference("mlm_pred", nn_model_dict["mlm_pred"], mlm_pred)
-    print_and_plot_difference("nsp_pred", nn_model_dict["nsp_pred"], nsp_pred)
-    print_and_plot_difference("loss", nn_model_dict["loss"], py_loss)
+        "pooled", nn_model_dict["pooled"], py_pooled, for_grad=True)
+    print_and_plot_difference(
+        "mlm_pred", nn_model_dict["mlm_pred"], mlm_pred, for_grad=True)
+    print_and_plot_difference(
+        "nsp_pred", nn_model_dict["nsp_pred"], nsp_pred, for_grad=True)
+    print_and_plot_difference(
+        "loss", nn_model_dict["loss"], py_loss, for_grad=True)
