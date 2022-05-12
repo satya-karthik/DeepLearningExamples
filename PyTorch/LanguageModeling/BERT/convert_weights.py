@@ -158,7 +158,10 @@ def rename_params(key, v):
     elif key.lower() == "cls.seq_relationship.bias".lower():
         key = "nsp/affine/b"
         v = numpy.transpose(v)
-    return key, v
+    else:
+        raise ValueError(f"key: {key} with shape: {v.shape} "
+                         "is not matching with any know pattern.")
+        return key, v
 
 
 def pytorch_to_nnabla(input_file, h5_file):

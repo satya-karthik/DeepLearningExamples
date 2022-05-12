@@ -192,18 +192,23 @@ def get_nnabla_model(args):
 
     nn.clear_parameters()
     model = BertModel()
-    encoder, pooled = model(args, nn_input_ids,
-                            nn_attention_mask,
-                            nn_token_type_ids,
-                            vocab_size=vocab_size)
+    [encoder, pooled,
+     en_layers, embedding_output] = model(args, nn_input_ids,
+                                          nn_attention_mask,
+                                          nn_token_type_ids,
+                                          vocab_size=vocab_size)
+    encoder.persistent = True
+    pooled.persistent = True
+    embedding_output.persistent = True
     mlm_pred, nsp_pred = bert_for_pre_training(encoder, pooled)
+    mlm_pred.persistent = True
+    nsp_pred.persistent = True
+    for i in range(len(en_layers)):
+        en_layers[i].persistent = True
 
     loss = bert_pretraining_criterion(
         mlm_pred, nsp_pred, MLM_labels, NSP_labels)
     loss.persistent = True
-    mlm_pred.persistent = True
-    nsp_pred.persistent = True
-
     return {"input_ids": nn_input_ids,
             "token_type_ids": nn_token_type_ids,
             "attention_mask": nn_attention_mask,
@@ -213,7 +218,9 @@ def get_nnabla_model(args):
             "nsp_pred": nsp_pred,
             "loss": loss,
             "encoder": encoder,
-            "pooled": pooled}
+            "pooled": pooled,
+            "en_layers": en_layers,
+            "embedding_output": embedding_output}
 
 
 def nnabla_assign_data(var_dict, data_dict, args):
@@ -395,10 +402,6 @@ if __name__ == "__main__":
     logger.info(f"length of nnabla weights: {len(nn.get_parameters())}")
 
     # create pytorch model
-    torch.nn.modules.module.register_module_forward_hook(pytorch_forward_hook)
-    torch.nn.modules.module.register_module_full_backward_hook(
-        pytorch_backward_hook)
-
     args.bert_config = "bert_config_base.json"
     py_model, py_loss_criteria = get_pytroch_model(args)
     py_weights = torch.load(args.pytorch_weights, map_location=args.device)
@@ -420,17 +423,24 @@ if __name__ == "__main__":
     # assign data to nnabla variable
     nnabla_assign_data(nn_model_dict, data_dict, args)
     # nnabla forward
-    print("\n\n\n")
-    nn_model_dict["loss"].forward(clear_no_need_grad=True,
-                                  function_post_hook=nnabla_forward_hook)
-    print("\n\n\n")
+    nn_model_dict["loss"].forward(clear_no_need_grad=True)
+
     # pytorch forward
     py_model.zero_grad()
     # create variable for pytorch
     ii, tti, am, mlm, nsp = pytorch_assign_data(args, data_dict)
-    mlm_pred, nsp_pred = py_model(ii, tti, am)
+    [mlm_pred, nsp_pred, py_encoder, py_pooled,
+     encoder_layers, embedding_output] = py_model(ii, tti, am)
     py_loss = py_loss_criteria(mlm_pred, nsp_pred, mlm, nsp)
-    print("\n\n\n")
+    py_encoder.retain_grad()
+    py_pooled.retain_grad()
+    mlm_pred.retain_grad()
+    nsp_pred.retain_grad()
+    py_loss.retain_grad()
+    embedding_output.retain_grad()
+    # for encoder_layers
+    for i, _ in enumerate(encoder_layers):
+        encoder_layers[i].retain_grad()
 
     # compare weight values after forward.
     logger.info('weight comparision after forward')
@@ -439,15 +449,45 @@ if __name__ == "__main__":
     compare_weights(nn_weight_dict, py_weight_dict)
     logger.info('weight comparision done')
 
-    print("\n\n\n")
     # compare weight values after backward.
-    nn_model_dict["loss"].backward(clear_buffer=True,
-                                   function_post_hook=nnabla_backward_hook)
-    print("\n\n\n")
-    py_loss.backward()
-    print("\n\n\n")
-    logger.info('weight comparision after backward')
-    nn_weight_dict = nn.get_parameters()
-    py_weight_dict = convert_pytorch_weights_to_nnabla(py_model.state_dict())
-    compare_weights(nn_weight_dict, py_weight_dict)
-    logger.info('weight comparision done')
+    # nn_model_dict["loss"].backward(clear_buffer=True)
+    # py_loss.backward()
+    # logger.info('weight comparision after backward')
+    # nn_weight_dict = nn.get_parameters()
+    # py_weight_dict = convert_pytorch_weights_to_nnabla(py_model.state_dict())
+    # compare_weights(nn_weight_dict, py_weight_dict)
+    # logger.info('weight comparision done')
+
+    # compute variables difference.
+    print("variable name \t\tmean\t\tmax\t\tmin\t\tstd")
+
+    print_and_plot_difference(
+        "input_ids", nn_model_dict["input_ids"], ii, for_grad=False)
+    print_and_plot_difference(
+        "token_type_ids", nn_model_dict["token_type_ids"], tti, for_grad=False)
+    print_and_plot_difference(
+        "attention_mask", nn_model_dict["attention_mask"], am, for_grad=False)
+    print_and_plot_difference(
+        "MLM_label", nn_model_dict["MLM_label"], mlm, for_grad=False)
+    print_and_plot_difference(
+        "NSP_label", nn_model_dict["NSP_label"], nsp, for_grad=False)
+
+    print_and_plot_difference(
+        "embedding_output", nn_model_dict["embedding_output"],
+        embedding_output)
+
+    for i, ens in enumerate(zip(nn_model_dict["en_layers"], encoder_layers)):
+        nn_en, py_en = ens
+        inx = i + 1
+        print_and_plot_difference(f"encoder_{inx}", nn_en, py_en,
+                                  base_dir="plots/encoders",
+                                  for_grad=False,
+                                  encoder_layer=True,
+                                  create_hist=True)
+
+    print_and_plot_difference(
+        "final encoder", nn_model_dict["encoder"], py_encoder)
+    print_and_plot_difference("pooled", nn_model_dict["pooled"], py_pooled)
+    print_and_plot_difference("mlm_pred", nn_model_dict["mlm_pred"], mlm_pred)
+    print_and_plot_difference("nsp_pred", nn_model_dict["nsp_pred"], nsp_pred)
+    print_and_plot_difference("loss", nn_model_dict["loss"], py_loss)
