@@ -104,6 +104,9 @@ def rename_params(key, v):
             key = (f"encoder{layer_id:02d}/transformer_encode/"
                    "enc_affine1/affine/W")
             v = numpy.transpose(v)
+        else:
+            raise ValueError(f"key: {key} with shape: {v.shape} "
+                             "is not matching with any know pattern.")
     elif 'embeddings.LayerNorm' in key:
         if 'weight' in key:
             key = key.replace('bert.embeddings.LayerNorm.weight',
@@ -113,6 +116,9 @@ def rename_params(key, v):
             key = key.replace('bert.embeddings.LayerNorm.bias',
                               'embed/layer_normalization/beta')
             v = numpy.reshape(v, (1, 1, v.shape[-1]))
+        else:
+            raise ValueError(f"key: {key} with shape: {v.shape} "
+                             "is not matching with any know pattern.")
     elif 'word_embeddings' in key:
         key = 'word_embeddings/embed/W'
     elif 'token_type_embeddings' in key:
@@ -161,7 +167,7 @@ def rename_params(key, v):
     else:
         raise ValueError(f"key: {key} with shape: {v.shape} "
                          "is not matching with any know pattern.")
-        return key, v
+    return key, v
 
 
 def pytorch_to_nnabla(input_file, h5_file):
